@@ -1,0 +1,30 @@
+- name: Create the cluster
+  hosts: admin
+  become: yes
+  tasks:
+    - name: Bootstrap cluster with admin as first host
+      command: cephadm bootstrap --mon-ip $(ip -4 addr show <INTERFACE> | grep -oP '(?<=inet\s)\d+(\.\d+){3}') # Pay attention to the interface specified
+
+    - name: Wait for the cluster to be ready
+      command: ceph orch status
+      register: orch_status
+      until: orch_status.stdout.find('No services') == -1
+      retries: 10
+      delay: 10
+
+    - name: Copy ssh id to the other hosts
+      command: ssh-copy-id -f -i /etc/ceph/ceph.pub root@{{ item }}
+      with_items: "{{ groups['all'] }}"
+      when: item != 'admin'
+
+    - name: Generate hostnames and add hosts to Ceph cluster
+      command: ceph orch host add {{ host_name }} {{ host_ip }} _admin
+      loop: "{{ groups['all'] }}"
+      when: inventory_hostname != 'admin'
+      vars:
+        host_ip: "{{ hostvars[item]['ansible_host'] | default(hostvars[item]['ansible_default_ipv4']['address']) }}"
+        types: "{{ (['mon'] if item in groups['mon'] else []) +
+                  (['mgr'] if item in groups['mgr'] else []) +
+                  (['osd'] if item in groups['osd'] else []) }}"
+        index: "{{ groups['all'].index(item) + 1 }}"
+        host_name: "ceph-{{ '-'.join(types) }}-{{ index }}"

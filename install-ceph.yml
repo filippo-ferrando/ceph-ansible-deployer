@@ -1,0 +1,22 @@
+- name: install ceph utils
+  hosts: all, admin
+  become: yes
+  tasks:
+    - name: Update packages
+      apt:
+        update_cache: yes
+        upgrade: dist
+
+    - name: Install ceph-common
+      apt:
+        name: ceph-common
+        state: present
+
+- name: configure ceph-orch
+  hosts: admin
+  become: yes
+  tasks:
+    - name: Install ceph-ansible
+      apt:
+        name: cephadm
+        state: present
